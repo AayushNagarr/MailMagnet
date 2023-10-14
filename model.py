@@ -1,99 +1,62 @@
+from sentence_transformers import SentenceTransformer
 from sklearn.cluster import KMeans
-import numpy as np
-
-from collections import Counter
-from transformers import AutoTokenizer, AutoModel
-import torch
-import pandas as pd
-import matplotlib.pyplot as plt
 import re
+import pandas as pd
+import nltk
+from nltk.corpus import stopwords
+from sklearn.feature_extraction.text import TfidfVectorizer
 
-# Load the CSV data into a DataFrame
-df = pd.read_csv('./emails.csv')
+nltk.download('stopwords')
+stop_words = set(stopwords.words('english'))
 
-# Preprocess the text data
-def preprocess_text(text):
-    if isinstance(text, str):
-        # Remove special characters and numbers
-        text = re.sub(r'[^A-Za-z\s]', '', text)
-        # Convert to lowercase
-        text = text.lower()
-    return text
+def remove_stopwords(line):
+    words = line.split()
+    words = [word for word in words if word not in stop_words]
+    return ' '.join(words)
 
-df['Content'] = df['Content'].apply(preprocess_text)
+# Load the data into a DataFrame
+file_path = './emails.csv'
+df = pd.read_csv(file_path)
 
-# Load the pre-trained BERT model and tokenizer
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-model = AutoModel.from_pretrained("bert-base-uncased")
+# Preprocess the text in the DataFrame
+df['Content'] = df['Content'].apply(lambda line: re.sub(r'http\S+', '', line.strip()))
+df['Content'] = df['Content'].apply(remove_stopwords)
 
-# Function to convert text to BERT embeddings
-def get_bert_embeddings(text):
-    # Ensure that text is a string
-    if not isinstance(text, str):
-        text = str(text)
+# Encode the sentences
+embedder = SentenceTransformer('distilbert-base-nli-stsb-mean-tokens')
+corpus_embeddings = embedder.encode(df['text'].tolist())
 
-    # Tokenize the text
-    inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True, max_length=512)
+# Perform K-Means clustering
+num_clusters = 5
+clustering_model = KMeans(n_clusters=num_clusters)
+clustering_model.fit(corpus_embeddings)
+cluster_assignment = clustering_model.labels_
+df['cluster'] = cluster_assignment
 
-    # Get BERT embeddings
-    with torch.no_grad():
-        outputs = model(**inputs)
-    
-    # Extract the embeddings from the BERT model
-    embeddings = outputs.last_hidden_state.mean(dim=1).squeeze().numpy()
-    
-    return embeddings
+# Group sentences by cluster
+clustered_sentences = df.groupby('cluster')['Content'].apply(list)
 
-# Apply BERT embeddings to the entire dataset
-df['BERT_Embeddings'] = df['Content'].apply(get_bert_embeddings)
+# Convert the clustered sentences into separate documents for TF-IDF analysis
+clustered_documents = [' '.join(cluster) for cluster in clustered_sentences]
 
+# Create a TF-IDF vectorizer
+tfidf_vectorizer = TfidfVectorizer()
 
+# Fit and transform the clustered documents
+tfidf_matrix = tfidf_vectorizer.fit_transform(clustered_documents)
 
-# Extract BERT embeddings and convert to numpy array
-embeddings = np.array(df['BERT_Embeddings'].tolist())
+# Get the feature names (words) from the TF-IDF vectorizer
+feature_names = tfidf_vectorizer.get_feature_names_out()
 
-# Determine the optimal number of clusters (you can customize this)
-n_clusters = 5  # Adjust as needed
+# For each cluster, find the top N keywords
+num_keywords = 5  # You can adjust this value as needed
+cluster_labels = []
 
-# Perform clustering
-kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-df['Cluster'] = kmeans.fit_predict(embeddings)
+for i, cluster_matrix in enumerate(tfidf_matrix):
+    feature_index = cluster_matrix.toarray().argsort()[:, -num_keywords][0]
+    cluster_keywords = [feature_names[idx] for idx in feature_index]
+    cluster_labels.append(cluster_keywords)
 
-
-
-
-cluster_word_counts = []
-
-for cluster_id in range(n_clusters):
-    cluster_data = df[df['Cluster'] == cluster_id]
-
-    # Filter out rows with NaN values and non-string values
-    cluster_data = cluster_data.dropna(subset=['Content'])
-    cluster_data = cluster_data[cluster_data['Content'].apply(lambda x: isinstance(x, str))]
-
-    # Join the filtered text
-    cluster_text = ' '.join(cluster_data['Content'])
-    words = cluster_text.split()
-    word_counts = Counter(words)
-    cluster_word_counts.append(word_counts)
-
-# Find the most common words in each cluster
-for cluster_id, word_counts in enumerate(cluster_word_counts):
-    common_words = word_counts.most_common(10)  # Change 10 to the number of top words you want to display
-    print(f"Cluster {cluster_id} - Top Words:")
-    for word, count in common_words:
-        print(f"{word}: {count}")
-
-
-# Visualize the most common words in each cluster
-for cluster_id, word_counts in enumerate(cluster_word_counts):
-    common_words = word_counts.most_common(10)  # Change 10 to the number of top words you want to display
-    words, counts = zip(*common_words)
-    
-    plt.figure(figsize=(10, 6))
-    plt.bar(words, counts)
-    plt.title(f"Cluster {cluster_id} - Top Words")
-    plt.xlabel("Words")
-    plt.ylabel("Frequency")
-    plt.xticks(rotation=45)
-    plt.show()
+# Print the cluster labels
+for i, labels in enumerate(cluster_labels):
+    print(f"Cluster {i + 1} - Labels: {', '.join(labels)}")
