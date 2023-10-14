@@ -1,4 +1,4 @@
-
+import setupImap
 
 
 export default function Home() {
@@ -6,3 +6,5 @@ export default function Home() {
     <div> </div>
     )       
 }
+
+

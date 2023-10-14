@@ -1,10 +1,12 @@
-import Imap from 'imap';
-import { simpleParser } from 'mailparser';
-import { inspect } from 'util';
+const Imap = require('imap');
+const { simpleParser } = require('mailparser');
+const { inspect } = require('util');
+
+
 
 const imap = new Imap({
-  user: 'mygmail@gmail.com',
-  password: 'mypassword',
+  user: 'aayuanku@gmail.com',
+  password: 'qqdq xzpc ogbz xpqu',
   host: 'imap.gmail.com',
   port: 993,
   tls: true
@@ -19,7 +21,6 @@ const parse_email = async (body) => {
   // ...............
 };
 
-const setupImap = () => {
   imap.once('ready', () => {
     openInbox((err, box) => {
       if (err) throw err;
@@ -77,6 +78,4 @@ const setupImap = () => {
   });
 
   imap.connect();
-};
 
-export default setupImap;
