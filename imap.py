@@ -19,10 +19,10 @@ mail.select('inbox')
 # Search for the latest 1000 emails
 result, data = mail.uid('search', None, 'ALL')
 email_uids = data[0].split()
-email_uids = email_uids[-1000:]  # Retrieve the latest 1000 emails
+email_uids = email_uids[-2000:]  # Retrieve the latest 1000 emails
 
 # Create a CSV file to store email data
-csv_file = 'demails.csv'
+csv_file = 'emails1.csv'
 
 # Function to extract text from email content
 def extract_text_from_email(msg):
